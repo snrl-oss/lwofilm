@@ -1,0 +1,102 @@
+// Sinemateka — dijital sinema arşivi
+// Prisma şeması (SQLite)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Film kaydı. TMDB'den gelen temel bilgiler + yerel arşiv görselleri.
+model Movie {
+  id            Int          @id @default(autoincrement())
+  tmdbId        Int?         @unique
+  imdbId        String?
+  slug          String       @unique
+  title         String
+  originalTitle String?
+  tagline       String?
+  overview      String
+  year          Int
+  runtime       Int?
+  rating        Float?
+  voteCount     Int?
+  posterUrl     String
+  backdropUrl   String?
+  trailerUrl    String?
+  kind          String       @default("FILM") // FILM | SERIES
+  featured      Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  categories Category[]
+  sources    VideoSource[]
+  episodes   Episode[]
+  license    LicenseInfo?
+
+  @@index([year])
+  @@index([rating])
+  @@index([featured])
+  @@index([kind])
+}
+
+/// Dizi bölümleri. Kaynaklar bölüm bazında tanımlanır.
+model Episode {
+  id       Int     @id @default(autoincrement())
+  movieId  Int
+  movie    Movie   @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  season   Int     @default(1)
+  number   Int
+  title    String
+  overview String?
+  runtime  Int?
+  stillUrl String?
+
+  sources VideoSource[]
+
+  @@unique([movieId, season, number])
+  @@index([movieId])
+}
+
+/// Tür / kategori etiketleri.
+model Category {
+  id     Int     @id @default(autoincrement())
+  name   String
+  slug   String  @unique
+  movies Movie[]
+}
+
+/// Oynatıcı sekmesi başına bir yasal video kaynağı.
+model VideoSource {
+  id        Int      @id @default(autoincrement())
+  movieId   Int
+  movie     Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  episodeId Int?
+  episode   Episode? @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  label     String
+  provider  String   @default("archive") // archive | youtube | wikimedia | mp4
+  url       String // iframe / embed adresi
+  language  String   @default("Orijinal Dil")
+  quality   String   @default("1080p")
+  isDefault Boolean  @default(false)
+  sortOrder Int      @default(0)
+
+  @@index([movieId])
+  @@index([episodeId])
+}
+
+/// Filmin lisans durumu ve doğrulama kaynağı.
+model LicenseInfo {
+  id          Int      @id @default(autoincrement())
+  movieId     Int      @unique
+  movie       Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  type        String   @default("PUBLIC_DOMAIN") // PUBLIC_DOMAIN | CC0 | CC_BY | CC_BY_SA | CC_BY_NC | OFFICIAL_FREE | UNKNOWN
+  sourceName  String   @default("Internet Archive")
+  sourceUrl   String?
+  attribution String?
+  verified    Boolean  @default(false)
+  verifiedAt  DateTime?
+}
